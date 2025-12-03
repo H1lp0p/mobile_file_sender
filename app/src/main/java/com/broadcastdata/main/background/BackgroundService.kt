@@ -20,6 +20,12 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
 import androidx.core.net.toUri
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 
 @HiltWorker
 class BackgroundService @AssistedInject constructor(
@@ -36,8 +42,19 @@ class BackgroundService @AssistedInject constructor(
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun doWork(): Result {
 
+        var will_process = false
+
+        context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE)
+            .getString(PREFS_WORKER_STATE, "false")?.let{
+                will_process = it == "true"
+            }
+
         val app = applicationContext as MainApplication
         val onRecieve = app.onBroadcastService
+
+        if (!will_process){
+            return Result.success()
+        }
 
         try {
             discoverServer { host, port ->
@@ -53,12 +70,38 @@ class BackgroundService @AssistedInject constructor(
                 }
             }
 
+            scheduleNextWork(15, TimeUnit.MINUTES)
             return Result.success()
 
         }
         catch (e: Exception){
             return Result.failure()
         }
+    }
+
+    private fun scheduleNextWork(delay: Long, unit: TimeUnit){
+
+        var is_working = false
+
+        context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE)
+            .getString(PREFS_WORKER_STATE, "false")?.let{
+                is_working = it == "true"
+            }
+
+        if (is_working){
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED)
+                .build()
+
+            val retryRequest = OneTimeWorkRequestBuilder<BackgroundService>()
+                .setInitialDelay(delay, unit)
+                .setConstraints(constraints)
+                .build()
+
+            WorkManager.getInstance(applicationContext)
+                .enqueueUniqueWork("upload-chain", ExistingWorkPolicy.REPLACE, retryRequest)
+        }
+
     }
 
     private fun discoverServer(onServerFound: (String, Int) -> Unit) {
@@ -119,6 +162,8 @@ class BackgroundService @AssistedInject constructor(
     companion object{
         const val WORKER_PREFS = "worker_presf"
         const val PREFS_URI_KEY = "file_uri"
+        const val PREFS_WORKER_STATE = "worker_state"
+
         const val PREFS_NAME_KEY = "file_name"
         const val PREFS_CARNUM_KEY = "car_num"
     }

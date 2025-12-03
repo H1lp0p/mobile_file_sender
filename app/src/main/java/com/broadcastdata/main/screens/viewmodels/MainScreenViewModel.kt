@@ -8,7 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -45,13 +47,10 @@ class MainViewMode @Inject constructor(
     val carNumValidity = _carNumValidity.asStateFlow()
 
     private fun checkMonitoringStatus() {
-        viewModelScope.launch {
-            workManager.getWorkInfosForUniqueWorkFlow(wifiCheckWorkName)
-                .collect { workInfos ->
-                    val isMonitoring = workInfos.any { it.state == WorkInfo.State.ENQUEUED }
-                    _workerState.value = isMonitoring
-                }
-        }
+        context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE)
+            .getString(PREFS_WORKER_STATE, "false")?.let {
+                _workerState.value = it == "true"
+            }
     }
 
     fun startWifiMonitoring() {
@@ -60,22 +59,28 @@ class MainViewMode @Inject constructor(
             .build()
 
         //TODO switch to BroadcastReciever or network actions if android version allows
-        val wifiCheckRequest = PeriodicWorkRequestBuilder<BackgroundService>(
-            15, TimeUnit.MINUTES
-        ).setConstraints(constraints)
+        val retryRequest = OneTimeWorkRequestBuilder<BackgroundService>()
+            .setConstraints(constraints)
             .build()
 
-        workManager.enqueueUniquePeriodicWork(
-            wifiCheckWorkName,
-            ExistingPeriodicWorkPolicy.KEEP,
-            wifiCheckRequest
-        )
+        WorkManager.getInstance(context)
+            .enqueueUniqueWork(wifiCheckWorkName, ExistingWorkPolicy.REPLACE, retryRequest)
 
-        _workerState.value = true
+        context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE).edit {
+            putString(PREFS_WORKER_STATE, "true")
+        }
+
+        checkMonitoringStatus()
     }
 
     fun stopWifiMonitoring() {
         workManager.cancelUniqueWork(wifiCheckWorkName)
+
+        context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE).edit {
+            putString(PREFS_WORKER_STATE, "false")
+        }
+
+        checkMonitoringStatus()
     }
 
     fun saveFileUriForWorker(uri: Uri, originalName: String?) {
@@ -117,6 +122,11 @@ class MainViewMode @Inject constructor(
             .getString(PREFS_URI_KEY, null)?.let{
                 _selectedFolder.value = ".../${it.toUri().lastPathSegment}"
             }
+
+        context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE)
+            .getString(PREFS_WORKER_STATE, "false")?.let {
+                _workerState.value = it == "true"
+            }
     }
 
     companion object{
@@ -124,6 +134,8 @@ class MainViewMode @Inject constructor(
         const val PREFS_URI_KEY = "file_uri"
         const val PREFS_NAME_KEY = "file_name"
         const val PREFS_CARNUM_KEY = "car_num"
+
+        const val PREFS_WORKER_STATE = "worker_state"
 
         val carNumRegex = Regex("[а-я]\\d{3}[а-я]{2}\\d{2}")
     }
