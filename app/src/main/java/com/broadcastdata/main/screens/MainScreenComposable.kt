@@ -1,6 +1,7 @@
 package com.broadcastdata.main.screens
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,9 +57,19 @@ fun MainScreen(){
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let {
+
+            val contentResolver = context.contentResolver
+            try {
+                contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            } catch (e: SecurityException) {
+                Toast.makeText(context, "Не удалось получить постоянное разрешение", Toast.LENGTH_SHORT).show()
+                return@let
+            }
+
             viewModel.saveFileUriForWorker(uri, uri.lastPathSegment)
         }
-        Toast.makeText(context, "Got uri $uri", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Got uri ${uri?.lastPathSegment}", Toast.LENGTH_SHORT).show()
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(

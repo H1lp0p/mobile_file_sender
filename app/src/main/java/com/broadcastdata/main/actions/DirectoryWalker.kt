@@ -5,38 +5,18 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import java.io.InputStream
+import androidx.documentfile.provider.DocumentFile
 
 class DirectoryWalker(private val context: Context) {
     fun getDirectoryFiles(directoryUri: Uri): List<Uri>{
         val files = mutableListOf<Uri>()
-        val contentResolver = context.contentResolver
 
-        // Получаем documentId из tree URI
-        val documentId = DocumentsContract.getTreeDocumentId(directoryUri)
+        val dirDocFile = DocumentFile.fromTreeUri(context, directoryUri)
 
-        // Строим URI для дочерних документов
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(directoryUri, documentId)
-
-        contentResolver.query(
-            childrenUri,  // Используем childrenUri вместо directoryUri
-            null, null, null, null
-        )?.use { cursor ->
-            val displayNameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val mimeTypeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-            val documentIdIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-
-            while (cursor.moveToNext()) {
-                val mimeType = cursor.getString(mimeTypeIndex)
-                val displayName = cursor.getString(displayNameIndex)
-                val childDocumentId = cursor.getString(documentIdIndex)
-
-                // Игнорируем директории, берем только файлы
-                if (mimeType != DocumentsContract.Document.MIME_TYPE_DIR) {
-                    val fileUri = DocumentsContract.buildDocumentUriUsingTree(
-                        directoryUri,
-                        childDocumentId  // Используем documentId из курсора
-                    )
-                    files.add(fileUri)
+        if (dirDocFile != null && dirDocFile.exists()) {
+            for (fileDoc in dirDocFile.listFiles()) {
+                if (!fileDoc.isDirectory) {
+                    files.add(fileDoc.uri)
                 }
             }
         }
