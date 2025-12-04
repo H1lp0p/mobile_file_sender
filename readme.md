@@ -4,7 +4,7 @@
 - send's files every 15 minutes if allowed (15 minutes between uploads)
 
 # How to run
-- install .apk from [release](https://github.com/H1lp0p/mobile_file_sender/releases/tag/v1.0.0) (or build your own)
+- install .apk from [release](https://github.com/H1lp0p/mobile_file_sender/releases) (or build your own)
 - allow every permisssion in settings
 - run app
 
@@ -21,6 +21,7 @@
 
 # Important to know
 - You can change password in [PasswordScreenViewModel.kt](app/src/main/java/com/broadcastdata/main/screens/viewmodels/PasswordScreenViewModel.kt)
+
 ```kotlin
     companion object{
         const val PASSWORD = "pass"
